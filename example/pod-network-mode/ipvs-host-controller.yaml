@@ -1,0 +1,83 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    app: ipvs-host-controller
+    k8s-app: dw-ipvs
+  name: ipvs-host-controller
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: ipvs-host-controller
+      k8s-app: dw-ipvs
+  template:
+    metadata:
+      labels:
+        app: ipvs-host-controller
+        k8s-app: dw-ipvs
+    spec:
+      containers:
+      - env:
+        - name: VIP_NET
+          valueFrom:
+            configMapKeyRef:
+              name: ipvs-vip-networks
+              key: vipNet
+        args:
+        - -logtostderr
+        - -cidr
+        - $(VIP_NET)
+        - -v
+        - "2"
+        image: Demonware/ipvs-host-controller:latest
+        imagePullPolicy: Always
+        name: ipvs-host-controller
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          capabilities:
+            add:
+            - ALL
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+      hostIPC: true
+      hostNetwork: true
+      hostPID: true
+      initContainers:
+      - command:
+        - /bin/sh
+        - -c
+        - set -x; for device in /sys/class/net/eth*; do ifacename=$(basename $device);
+          ethtool -K $ifacename gro off; ip link set $ifacename mtu 9100; done
+        image: Demonware/ethtool-alpine:4.19
+        imagePullPolicy: IfNotPresent
+        name: ethtool-tuning
+        resources: {}
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+      nodeSelector:
+        node-role.kubernetes.io/ipvs: ""
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/ipvs
+      volumes:
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate

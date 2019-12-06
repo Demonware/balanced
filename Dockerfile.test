@@ -1,0 +1,11 @@
+from golang:1.12 as cache
+env GO111MODULE=on
+workdir github.com/Demonware/balanced
+copy go.mod .
+copy go.sum .
+run go mod download
+
+from cache as runner
+copy . .
+run go get -u github.com/jstemmer/go-junit-report
+run make test-junit && make test-coverage-html

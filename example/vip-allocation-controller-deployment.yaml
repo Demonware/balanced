@@ -1,0 +1,111 @@
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-vip-allocation-controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ipvs-vip-allocation-controller
+  namespace: kube-system
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-vip-allocation-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ipvs-vip-allocation-controller
+subjects:
+- kind: ServiceAccount
+  name: ipvs-vip-allocation-controller
+  namespace: kube-system
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: ipvs-vip-allocation-controller
+  namespace: kube-system
+  labels:
+    app: ipvs-vip-allocation-controller
+    k8s-app: dw-ipvs
+  annotations:
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8123"
+    prometheus.io/scrape: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipvs-vip-allocation-controller
+      k8s-app: dw-ipvs
+  template:
+    metadata:
+      labels:
+        app: ipvs-vip-allocation-controller
+        k8s-app: dw-ipvs
+      annotations:
+    spec:
+      serviceAccountName: ipvs-vip-allocation-controller
+      containers:
+      - name: ipvs-vip-allocation-controller
+        image: Demonware/vip-allocation-controller:v0.1.1-0-g5eee68f
+        imagePullPolicy: "Always"
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        args: ["-kubeconfig", "", "-logtostderr", "-cidr", "10.49.251.0/24", "-v", "2"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        ports:
+        - containerPort: 8123
+          name: metrics
+        - containerPort: 8124
+          name: health

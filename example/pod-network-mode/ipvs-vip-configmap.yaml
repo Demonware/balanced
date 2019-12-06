@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  vipNet: 10.0.1.0/24
+kind: ConfigMap
+metadata:
+  name: ipvs-vip-networks
+  namespace: kube-system

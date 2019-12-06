@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ipvs-controller-psp
+spec:
+  allowedCapabilities:
+  - 'NET_ADMIN'
+  allowedUnsafeSysctls:
+  - net.ipv4.vs.*
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+  - '*'

@@ -1,0 +1,117 @@
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ipvs-controller
+  namespace: kube-system
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ipvs-controller
+subjects:
+- kind: ServiceAccount
+  name: ipvs-controller
+  namespace: kube-system
+
+---
+
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: ipvs-controller
+  namespace: kube-system
+  labels:
+    app: ipvs-controller
+    k8s-app: dw-ipvs
+  annotations:
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8123"
+    prometheus.io/scrape: "true"
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ipvs-controller
+        k8s-app: dw-ipvs
+    spec:
+      serviceAccountName: ipvs-controller
+      hostNetwork: true
+      hostIPC: true
+      hostPID: true
+      containers:
+      - image: Demonware/ipvs-controller:v0.1.1-0-g5eee68f
+        name: ipvs-controller
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4096Mi
+          requests:
+            cpu: 2000m
+            memory: 4096Mi
+        args: ["-kubeconfig", "", "-logtostderr", "-cidr", "10.49.251.0/24" ,"-v", "2"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        ports:
+        - containerPort: 8123
+          name: metrics
+        - containerPort: 8124
+          name: health
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["ALL"]
+        imagePullPolicy: "Always"
+        volumeMounts:
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+      volumes:
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      nodeSelector:
+          node-role.kubernetes.io/ipvs: ""
+      tolerations:
+        - key: "node-role.kubernetes.io/ipvs"
+          effect: NoSchedule

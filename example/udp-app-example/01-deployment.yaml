@@ -1,0 +1,39 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: udp-ping-pong
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: udp-ping-pong
+    spec:
+      initContainers:
+      - name: wait
+        image: Demonware/vip-dep-init:v0.0.1
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: "64Mi"
+          limits:
+            cpu: 100m
+            memory: "64Mi"
+      containers:
+      - name: udp
+        image: Demonware/udp-ping-pong:v0.0.1-3-g391f8c5
+        command:
+          - /bin/sh
+          - -c
+          - "ip=$(ip addr show tunl0 | grep inet | awk '{print $2}' | cut -d'/' -f1); exec /app -url=$ip:12161"
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 12161
+        resources:
+          requests:
+            cpu: 0.5
+            memory: "128Mi"
+          limits:
+            cpu: 0.5
+            memory: "128Mi"

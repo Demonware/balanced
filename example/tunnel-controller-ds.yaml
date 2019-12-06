@@ -1,0 +1,126 @@
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-tunnel-controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ipvs-tunnel-controller
+  namespace: kube-system
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: ipvs-tunnel-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ipvs-tunnel-controller
+subjects:
+- kind: ServiceAccount
+  name: ipvs-tunnel-controller
+  namespace: kube-system
+
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: ipvs-tunnel-controller
+  namespace: kube-system
+  labels:
+    app: ipvs-tunnel-controller
+    k8s-app: dw-ipvs
+  annotations:
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8123"
+    prometheus.io/scrape: "true"
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        log_drop: "true"
+        ipvs-tunnel-controller.demonware.net/ignore: "true"
+      labels:
+        app: ipvs-tunnel-controller
+        k8s-app: dw-ipvs
+    spec:
+      serviceAccountName: ipvs-tunnel-controller
+      hostNetwork: true
+      hostIPC: true
+      hostPID: true
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: tunnel-controller
+        image: Demonware/tunnel-controller:v0.1.1-0-g5eee68f
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8123
+          name: metrics
+        - containerPort: 8124
+          name: health
+        args: ["-kubeconfig", "", "-logtostderr", "-v", "2"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["ALL"]
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        env:
+          - name: DOCKER_API_VERSION
+            value: "1.24"
+        volumeMounts:
+        - name: dockersocket
+          mountPath: /var/run/docker.sock
+          readOnly: true
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+      volumes:
+      - name: dockersocket
+        hostPath:
+          path: /var/run/docker.sock
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules

@@ -1,0 +1,160 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    app: ipvs-controller-test
+    k8s-app: dw-ipvs
+  name: ipvs-controller-test
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: ipvs-controller-test
+      k8s-app: dw-ipvs
+  template:
+    metadata:
+      labels:
+        app: ipvs-controller-test
+        k8s-app: dw-ipvs
+    spec:
+      securityContext:
+        sysctls:
+        - name: net.ipv4.vs.conntrack
+          value: "0"
+        - name: net.ipv4.vs.sloppy_tcp
+          value: "1"
+        - name: net.ipv4.vs.conn_reuse_mode
+          value: "2"
+        - name: net.ipv4.vs.schedule_icmp
+          value: "1"
+      containers:
+      - env:
+        - name: VIP_NET
+          valueFrom:
+            configMapKeyRef:
+              name: ipvs-vip-networks
+              key: vipNet
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        image: Demonware/balanced-anycast-sidecar:0.3.5
+        imagePullPolicy: Always
+        name: balanced-anycast
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+        volumeMounts:
+        - mountPath: /host
+          name: bird-host
+        - mountPath: /run/bird
+          name: bird-run
+      - args:
+        - -config
+        - /config/config.yaml
+        - -kubeconfig
+        - ""
+        - -logtostderr
+        - -cidr
+        - $(VIP_NET)
+        - -load_kernel_modules=false
+        - -set_ipvs_kernel_params=false
+        - -kube_proxy_compat=false
+        - -bind_address
+        - $(POD_IP)
+        - -v
+        - "2"
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        image: Demonware/ipvs-controller:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: health
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: ipvs-controller
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+        ports:
+        - containerPort: 8123
+          name: metrics
+          protocol: TCP
+        - containerPort: 8124
+          name: health
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+        - mountPath: /config
+          name: config
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      hostNetwork: false
+      initContainers:
+      - image: Demonware/pod-dep-init:v0.0.1
+        imagePullPolicy: Always
+        name: pod-dep-init
+        env:
+        - name: NAMESPACE
+          value: kube-system
+        - name: LABEL_SELECTOR
+          value: app=ipvs-host-controller
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+      nodeSelector:
+        node-role.kubernetes.io/ipvs: ""
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: ipvs-controller
+      serviceAccountName: ipvs-controller
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/ipvs
+      volumes:
+      - hostPath:
+          path: /etc/bird/bird.d
+          type: ""
+        name: bird-host
+      - hostPath:
+          path: /run/bird
+          type: ""
+        name: bird-run
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
+      - name: config
+        secret:
+          defaultMode: 420
+          secretName: ipvs-controller
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
