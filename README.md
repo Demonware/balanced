@@ -1,5 +1,7 @@
 <img src="images/logo.png" title="BalanceD" width="25%" />
 
+![Go Report Card](https://goreportcard.com/badge/github.com/Demonware/balanced)
+
 **BalanceD** is a Layer-4 Linux Virtual Server (LVS) based load balancing platform for Kubernetes.
 
 It is capable of providing basic load balancing for any Kubernetes cluster and is reliable and performant. This is achieved by utilizing LVS (also known as IPVS - IP Virtual Server), along with any Consistent-Hashing algorithm, to implement a stateless Direct-Server-Return (DSR) Layer-4 load balancer. The stateless nature means it can be horizontally scaled with the help of AnyCast and ECMP.
